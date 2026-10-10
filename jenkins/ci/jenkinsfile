@@ -1,62 +1,54 @@
-// CI pipeline: manual run, everything up to plan, no apply
+
 pipeline {
     agent any
 
-
     options {
         timestamps()
-        disableConcurrentBuilds()   // avoids two runs fighting over the state lock
+        disableConcurrentBuilds()
     }
 
     environment {
-        AWS_DEFAULT_REGION = 'us-east-1'   // change to your region
-        TF_IN_AUTOMATION   = 'true'
-        TF_INPUT           = 'false'
+        AWS_DEFAULT_REGION = 'us-east-1'
+        TF_IN_AUTOMATION = 'true'
+        TF_INPUT = 'false'
     }
 
-    
-stage('Clone repo') {
-    steps {
-        sh '''
-            if git -C aws-infrastructure rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-                echo "Repository already exists. Pulling latest changes..."
-                git -C aws-infrastructure pull --ff-only origin main
+    stages {
+        stage('Clone repo') {
+            steps {
+                sh '''
+                    if git -C aws-infrastructure rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+                        echo "Repository exists. Pulling latest changes..."
+                        git -C aws-infrastructure pull --ff-only origin main
+                    elif [ -e aws-infrastructure ]; then
+                        echo "Error: aws-infrastructure exists but is not a Git repository"
+                        exit 1
+                    else
+                        git clone --branch main https://github.com/sahilsarfaraz9492-deep/AWS-infra-ci-cd.git aws-infrastructure
+                    fi
 
-            elif [ -e aws-infrastructure ]; then
-                echo "Error: aws-infrastructure exists but is not a Git repository"
-                exit 1
-
-            else
-                echo "Cloning AWS infrastructure repository..."
-                git clone --branch main \
-                    https://github.com/sahilsarfaraz9492-deep/AWS-infra-ci-cd.git \
-                    aws-infrastructure
-            fi
-
-            echo "Repository status:"
-            git -C aws-infrastructure status --short --branch
-        '''
-    }
-}
-
+                    git -C aws-infrastructure status --short --branch
+                '''
+            }
+        }
 
         stage('Format check') {
             steps {
-                // fails the build if any file is not formatted
                 dir('aws-infrastructure') {
-                    sh 'terraform fmt'
+                    sh 'terraform fmt -check -recursive'
                 }
             }
         }
 
         stage('Init') {
-            environment {
-                AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-                AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
-            }
             steps {
                 dir('aws-infrastructure') {
-                    sh 'terraform init'
+                    withCredentials([
+                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                    ]) {
+                        sh 'terraform init'
+                    }
                 }
             }
         }
@@ -70,14 +62,15 @@ stage('Clone repo') {
         }
 
         stage('Plan') {
-            environment {
-                AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-                AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
-            }
             steps {
                 dir('aws-infrastructure') {
-                    sh 'terraform plan -out=tfplan'
-                    sh 'terraform show -no-color tfplan > plan.txt'
+                    withCredentials([
+                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                    ]) {
+                        sh 'terraform plan -out=tfplan'
+                        sh 'terraform show -no-color tfplan > plan.txt'
+                    }
                 }
             }
         }
@@ -87,6 +80,7 @@ stage('Clone repo') {
         success {
             archiveArtifacts artifacts: 'aws-infrastructure/plan.txt', fingerprint: true
         }
+
         cleanup {
             cleanWs()
         }
