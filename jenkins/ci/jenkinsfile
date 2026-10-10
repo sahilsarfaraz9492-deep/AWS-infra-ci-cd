@@ -14,21 +14,31 @@ pipeline {
         TF_INPUT           = 'false'
     }
 
-    stages {
-        stage('Clone repo') {
-            steps {
-                sh '''
-                    if git -C aws-infrastructure rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-                        git -C aws-infrastructure pull --ff-only
-                    elif [ -e aws-infrastructure ]; then
-                        echo "Error: aws-infrastructure exists but is not a Git repository"
-                        exit 1
-                    else
-                        git clone https://github.com/devShaik010/aws-infrastructure.git
-                    fi
-                '''
-            }
-        }
+    
+stage('Clone repo') {
+    steps {
+        sh '''
+            if git -C aws-infrastructure rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+                echo "Repository already exists. Pulling latest changes..."
+                git -C aws-infrastructure pull --ff-only origin main
+
+            elif [ -e aws-infrastructure ]; then
+                echo "Error: aws-infrastructure exists but is not a Git repository"
+                exit 1
+
+            else
+                echo "Cloning AWS infrastructure repository..."
+                git clone --branch main \
+                    https://github.com/sahilsarfaraz9492-deep/AWS-infra-ci-cd.git \
+                    aws-infrastructure
+            fi
+
+            echo "Repository status:"
+            git -C aws-infrastructure status --short --branch
+        '''
+    }
+}
+
 
         stage('Format check') {
             steps {
