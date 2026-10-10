@@ -19,7 +19,7 @@ provider "aws" {
 }
 
 module "ec2" {
-  source = "./modules/ec2"
+  source = "./modules/Ec2"
 
   ami_id        = var.ami_id
   instance_type = var.instance_type
